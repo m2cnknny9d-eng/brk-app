@@ -1,0 +1,37 @@
+{
+  "buildCommand": "npm run build && npx prisma generate",
+  "devCommand": "npm run dev",
+  "installCommand": "npm ci",
+  "framework": "nextjs",
+  "nodeVersion": "20.x",
+  "env": [
+    {
+      "key": "NEXTAUTH_SECRET",
+      "description": "Secret for NextAuth encryption"
+    },
+    {
+      "key": "DATABASE_URL",
+      "description": "PostgreSQL connection string"
+    },
+    {
+      "key": "NEXTAUTH_URL",
+      "description": "Your Vercel app URL (auto-filled)"
+    }
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "main": true
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
+  ]
+}
