@@ -1,0 +1,220 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Model
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  password      String
+  
+  role          Role      @default(VOLUNTEER)
+  isAdmin       Boolean   @default(false)
+  
+  // Gruppen
+  groups        UserGroup[]
+  
+  // Trainings
+  trainings     UserTraining[]
+  
+  // Invites
+  invitesSent   Invite[]
+  invitesUsed   Invite[] @relation("inviteUser")
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([email])
+}
+
+enum Role {
+  VOLUNTEER
+  COORDINATOR
+  ADMIN
+}
+
+// Gruppen Model
+model Group {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  description   String?
+  color         String    @default("#DC2626") // BRK Rot
+  icon          String    @default("Shield")
+  
+  // Sichtbarkeit
+  isPublic      Boolean   @default(true)    // Sichtbar für alle?
+  requiresAdmin Boolean   @default(false)   // Admin muss zuweisen?
+  
+  // Beziehungen
+  users         UserGroup[]
+  trainings     GroupTraining[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// User-Gruppe Zuordnung
+model UserGroup {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  groupId       String
+  group         Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  
+  joinedAt      DateTime  @default(now())
+  
+  @@unique([userId, groupId])
+}
+
+// Training/Kurs Definition
+model Training {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  
+  // Gültigkeit (in Monaten)
+  validityMonths Int     @default(24)
+  
+  // Häufigkeit (wie oft im Jahr erforderlich?)
+  requiredFrequency String  @default("yearly") // yearly, biennial, etc.
+  
+  icon          String    @default("Award")
+  color         String    @default("#2563EB")
+  
+  // Beziehungen
+  groups        GroupTraining[]
+  users         UserTraining[]
+  courseInstances CourseInstance[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Gruppe-Training Zuordnung
+model GroupTraining {
+  id            String    @id @default(cuid())
+  groupId       String
+  group         Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  
+  trainingId    String
+  training      Training  @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  
+  isRequired    Boolean   @default(true)
+  
+  @@unique([groupId, trainingId])
+}
+
+// User-Training Nachweis
+model UserTraining {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  trainingId      String
+  training        Training  @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  
+  // Nachweis
+  completionDate  DateTime
+  expiryDate      DateTime
+  certificateNo   String?
+  
+  // Status
+  status          TrainingStatus @default(ACTIVE)
+  
+  // Nächster Kurs
+  nextCourseId    String?
+  nextCourse      CourseInstance? @relation("userNextCourse", fields: [nextCourseId], references: [id])
+  
+  notes           String?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@unique([userId, trainingId])
+  @@index([userId])
+  @@index([trainingId])
+  @@index([status])
+}
+
+enum TrainingStatus {
+  ACTIVE
+  EXPIRING_SOON  // 3 Monate vor Ablauf
+  EXPIRED
+  NOT_STARTED
+}
+
+// Kurs-Instanzen (Termine)
+model CourseInstance {
+  id              String    @id @default(cuid())
+  trainingId      String
+  training        Training  @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  
+  title           String
+  description     String?
+  
+  // Termin
+  startDate       DateTime
+  endDate         DateTime
+  
+  // Ort
+  location        String
+  instructor      String?
+  
+  // Kapazität
+  maxParticipants Int?
+  
+  // Anmeldungen
+  registrations   UserTraining[] @relation("userNextCourse")
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([trainingId])
+  @@index([startDate])
+}
+
+// Einladungen für SEG
+model Invite {
+  id            String    @id @default(cuid())
+  email         String
+  groupId       String
+  group         Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  
+  invitedBy     String
+  admin         User      @relation(fields: [invitedBy], references: [id], onDelete: Cascade)
+  
+  usedBy        String?
+  user          User?     @relation("inviteUser", fields: [usedBy], references: [id], onDelete: SetNull)
+  
+  usedAt        DateTime?
+  expiresAt     DateTime
+  
+  createdAt     DateTime  @default(now())
+  
+  @@index([email])
+  @@index([groupId])
+  @@index([usedAt])
+}
+
+// Admin Logs
+model AdminLog {
+  id            String    @id @default(cuid())
+  adminId       String
+  action        String    // "created", "updated", "deleted", etc.
+  resource      String    // "user", "training", "course", etc.
+  resourceId    String?
+  details       Json?
+  
+  createdAt     DateTime  @default(now())
+  
+  @@index([adminId])
+  @@index([createdAt])
+}
